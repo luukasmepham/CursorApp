@@ -347,11 +347,24 @@ h3 {
     align-items: flex-end;
 }
 
+.filter-controls {
+    margin-top: 20px;
+    padding: 20px;
+    background-color: #2a2a2a;
+    border-radius: 10px;
+    text-align: center;
+}
+
+.filter-controls h3 {
+    margin-bottom: 15px;
+    color: #4CAF50;
+}
+
 .filter-buttons {
     display: flex;
     gap: 10px;
+    justify-content: center;
     flex-wrap: wrap;
-    justify-content: flex-end;
 }
 
 .filter-btn {
@@ -362,6 +375,23 @@ h3 {
 
 .filter-btn:hover {
     background-color: #4CAF50;
+}
+
+.filter-btn.active {
+    background-color: #4CAF50;
+}
+
+#gifIndicator {
+    color: #4CAF50;
+    font-weight: bold;
+    margin-top: 10px;
+    animation: pulse 1.5s infinite;
+}
+
+.preview-container canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    -ms-interpolation-mode: nearest-neighbor;
 }
 
 @media (max-width: 768px) {
@@ -375,8 +405,16 @@ h3 {
         align-items: stretch;
     }
 
+    .filter-controls {
+        margin: 20px 10px;
+    }
+
     .filter-buttons {
-        justify-content: center;
+        flex-direction: column;
+    }
+    
+    .filter-btn {
+        width: 100%;
     }
 
     .save-container {
@@ -504,4 +542,93 @@ h3 {
     margin-top: 20px;
     text-decoration: none;
     display: inline-block;
+}
+
+.pixel-density-control {
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #2a2a2a;
+    border-radius: 10px;
+    text-align: center;
+    max-width: 400px;
+}
+
+.pixel-density-control h3 {
+    color: #4CAF50;
+    margin-bottom: 15px;
+}
+
+.slider-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 10px;
+}
+
+.slider-container span {
+    color: #888;
+    font-size: 0.9rem;
+    min-width: 45px;
+}
+
+#pixelDensitySlider {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 8px;
+    background: #333;
+    border-radius: 4px;
+    outline: none;
+    max-width: 200px;
+}
+
+#pixelDensitySlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    background: #4CAF50;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+#pixelDensitySlider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: #4CAF50;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+#pixelDensitySlider::-webkit-slider-thumb:hover {
+    background: #45a049;
+}
+
+#pixelDensitySlider::-moz-range-thumb:hover {
+    background: #45a049;
+}
+
+.density-value {
+    color: #888;
+    font-size: 0.9rem;
+    margin-top: 5px;
+}
+
+.density-value span {
+    color: #4CAF50;
+    font-weight: bold;
+}
+
+@media (max-width: 768px) {
+    .pixel-density-control {
+        margin: 20px 10px;
+    }
+    
+    .slider-container {
+        flex-direction: row;
+    }
 } 

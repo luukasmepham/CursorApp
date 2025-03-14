@@ -14,11 +14,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const filenameInput = document.getElementById('filenameInput');
     const filterButtons = document.querySelectorAll('.filter-btn');
     const buttonContainer = document.getElementById('buttonContainer');
+    const filterControls = document.getElementById('filterControls');
+    const gifIndicator = document.getElementById('gifIndicator');
+    const pixelDensitySlider = document.getElementById('pixelDensitySlider');
+    const densityValue = document.getElementById('densityValue');
     
-    const PIXEL_SIZE = 32; // Fixed 32x32 pixel art
+    let currentPixelSize = 256; // Default to 256x256
     let originalImage = null;
     let isDrawing = false;
-    let originalPixelArt = null; // Store the original pixel art state
+    let originalPixelArt = null;
+    let isGif = false;
+    let gifFrames = [];
+    let currentFrame = 0;
+    let animationInterval = null;
+    let originalGifFrames = null;
+    let fullResolutionGifFrames = null; // Store full resolution GIF frames
+    let originalGifDimensions = { width: 0, height: 0 }; // Store original GIF dimensions
 
     // Monkey animation frames (32x32 ASCII art converted to pixels)
     const monkeyFrames = [
@@ -105,8 +116,8 @@ document.addEventListener('DOMContentLoaded', () => {
         loadingOverlay.className = 'loading-overlay';
         
         loadingCanvas = document.createElement('canvas');
-        loadingCanvas.width = PIXEL_SIZE * 8; // Larger size for visibility
-        loadingCanvas.height = PIXEL_SIZE * 8;
+        loadingCanvas.width = currentPixelSize * 8; // Larger size for visibility
+        loadingCanvas.height = currentPixelSize * 8;
         loadingCanvas.style.imageRendering = 'pixelated';
         
         loadingText = document.createElement('div');
@@ -128,8 +139,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.clearRect(0, 0, loadingCanvas.width, loadingCanvas.height);
             const frame = monkeyFrames[frameIndex];
             
-            for (let y = 0; y < PIXEL_SIZE; y++) {
-                for (let x = 0; x < PIXEL_SIZE; x++) {
+            for (let y = 0; y < currentPixelSize; y++) {
+                for (let x = 0; x < currentPixelSize; x++) {
                     if (frame[y][x] === '#') {
                         ctx.fillStyle = '#4CAF50';
                         ctx.fillRect(x * 8, y * 8, 8, 8);
@@ -179,75 +190,390 @@ document.addEventListener('DOMContentLoaded', () => {
         ]
     };
 
-    // Handle image upload
+    // Update pixel density display
+    function updateDensityDisplay() {
+        densityValue.textContent = `${currentPixelSize}x${currentPixelSize}`;
+    }
+    
+    // Function to resize pixel art
+    function resizePixelArt(newSize) {
+        if (isGif) {
+            // If scaling up and we have full resolution frames, use those
+            if (newSize > currentPixelSize && fullResolutionGifFrames) {
+                // Resize from full resolution frames
+                const resizedFrames = fullResolutionGifFrames.map(frame => {
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = newSize;
+                    tempCanvas.height = newSize;
+                    const tempCtx = tempCanvas.getContext('2d');
+                    tempCtx.imageSmoothingEnabled = false;
+                    
+                    // Create an intermediate canvas with the original frame
+                    const frameCanvas = document.createElement('canvas');
+                    frameCanvas.width = originalGifDimensions.width;
+                    frameCanvas.height = originalGifDimensions.height;
+                    const frameCtx = frameCanvas.getContext('2d');
+                    frameCtx.putImageData(frame.originalData, 0, 0);
+                    
+                    // Draw resized frame
+                    tempCtx.drawImage(frameCanvas, 0, 0, newSize, newSize);
+                    
+                    // Apply color quantization
+                    const imageData = tempCtx.getImageData(0, 0, newSize, newSize);
+                    const data = imageData.data;
+                    
+                    for (let i = 0; i < data.length; i += 4) {
+                        data[i] = Math.round(data[i] / 51) * 51;
+                        data[i + 1] = Math.round(data[i + 1] / 51) * 51;
+                        data[i + 2] = Math.round(data[i + 2] / 51) * 51;
+                    }
+                    
+                    return {
+                        data: imageData,
+                        delay: frame.delay
+                    };
+                });
+                
+                // Update canvas size and frames
+                pixelArtCanvas.width = newSize;
+                pixelArtCanvas.height = newSize;
+                gifFrames = resizedFrames;
+                
+            } else {
+                // Regular resize for scaling down
+                const resizedFrames = gifFrames.map(frame => {
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = newSize;
+                    tempCanvas.height = newSize;
+                    const tempCtx = tempCanvas.getContext('2d');
+                    tempCtx.imageSmoothingEnabled = false;
+                    
+                    // Create an intermediate canvas with the original frame
+                    const frameCanvas = document.createElement('canvas');
+                    frameCanvas.width = frame.data.width;
+                    frameCanvas.height = frame.data.height;
+                    const frameCtx = frameCanvas.getContext('2d');
+                    frameCtx.putImageData(frame.data, 0, 0);
+                    
+                    // Draw resized frame
+                    tempCtx.drawImage(frameCanvas, 0, 0, newSize, newSize);
+                    
+                    // Apply color quantization
+                    const imageData = tempCtx.getImageData(0, 0, newSize, newSize);
+                    const data = imageData.data;
+                    
+                    for (let i = 0; i < data.length; i += 4) {
+                        data[i] = Math.round(data[i] / 51) * 51;
+                        data[i + 1] = Math.round(data[i + 1] / 51) * 51;
+                        data[i + 2] = Math.round(data[i + 2] / 51) * 51;
+                    }
+                    
+                    return {
+                        data: imageData,
+                        delay: frame.delay
+                    };
+                });
+                
+                // Update canvas size and frames
+                pixelArtCanvas.width = newSize;
+                pixelArtCanvas.height = newSize;
+                gifFrames = resizedFrames;
+            }
+            
+            // Restart animation
+            animateGif();
+            
+        } else if (originalImage) {
+            // Resize static image
+            pixelArtCanvas.width = newSize;
+            pixelArtCanvas.height = newSize;
+            
+            const ctx = pixelArtCanvas.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+            ctx.clearRect(0, 0, newSize, newSize);
+            ctx.drawImage(originalImage, 0, 0, newSize, newSize);
+            
+            // Apply color quantization
+            const imageData = ctx.getImageData(0, 0, newSize, newSize);
+            const data = imageData.data;
+            
+            for (let i = 0; i < data.length; i += 4) {
+                data[i] = Math.round(data[i] / 51) * 51;
+                data[i + 1] = Math.round(data[i + 1] / 51) * 51;
+                data[i + 2] = Math.round(data[i + 2] / 51) * 51;
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            originalPixelArt = ctx.getImageData(0, 0, newSize, newSize);
+            
+            if (editorModal.style.display === 'block') {
+                createEditorGrid();
+            }
+        }
+    }
+    
+    // Pixel density slider event listener
+    pixelDensitySlider.addEventListener('input', () => {
+        currentPixelSize = parseInt(pixelDensitySlider.value);
+        updateDensityDisplay();
+        resizePixelArt(currentPixelSize);
+    });
+
+    // Function to process GIF frames
+    async function processGifFrames(gifBlob, targetSize = null) {
+        const frames = [];
+        const gifReader = new GifReader(new Uint8Array(await gifBlob.arrayBuffer()));
+        
+        // Store original dimensions
+        originalGifDimensions.width = gifReader.width;
+        originalGifDimensions.height = gifReader.height;
+        
+        // Use target size or original size if not specified
+        const outputSize = targetSize || Math.min(256, Math.max(gifReader.width, gifReader.height));
+        
+        for (let i = 0; i < gifReader.numFrames(); i++) {
+            const frameCanvas = document.createElement('canvas');
+            frameCanvas.width = outputSize;
+            frameCanvas.height = outputSize;
+            const frameCtx = frameCanvas.getContext('2d');
+            
+            // Create temporary canvas for full-size frame
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = gifReader.width;
+            tempCanvas.height = gifReader.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // Get frame data
+            const frameData = gifReader.frameInfo(i);
+            const pixels = new Uint8ClampedArray(gifReader.width * gifReader.height * 4);
+            gifReader.decodeAndBlitFrameRGBA(i, pixels);
+            
+            // Draw frame to temporary canvas
+            const imageData = new ImageData(pixels, gifReader.width, gifReader.height);
+            tempCtx.putImageData(imageData, 0, 0);
+            
+            // Scale down to target size
+            frameCtx.imageSmoothingEnabled = false;
+            frameCtx.drawImage(tempCanvas, 0, 0, outputSize, outputSize);
+            
+            // Apply color quantization
+            const frameImageData = frameCtx.getImageData(0, 0, outputSize, outputSize);
+            const data = frameImageData.data;
+            
+            for (let j = 0; j < data.length; j += 4) {
+                data[j] = Math.round(data[j] / 51) * 51;
+                data[j + 1] = Math.round(data[j + 1] / 51) * 51;
+                data[j + 2] = Math.round(data[j + 2] / 51) * 51;
+            }
+            
+            frameCtx.putImageData(frameImageData, 0, 0);
+            frames.push({
+                data: frameCtx.getImageData(0, 0, outputSize, outputSize),
+                delay: frameData.delay * 10,
+                originalData: targetSize ? null : tempCtx.getImageData(0, 0, gifReader.width, gifReader.height)
+            });
+        }
+        
+        return frames;
+    }
+    
+    // Function to animate GIF frames
+    function animateGif() {
+        if (animationInterval) {
+            clearInterval(animationInterval);
+        }
+        
+        const ctx = pixelArtCanvas.getContext('2d');
+        currentFrame = 0;
+        
+        animationInterval = setInterval(() => {
+            ctx.putImageData(gifFrames[currentFrame].data, 0, 0);
+            currentFrame = (currentFrame + 1) % gifFrames.length;
+        }, gifFrames[currentFrame].delay || 100);
+    }
+
+    // Modified image upload handler
     imageInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-
+        
         const animationInterval = showLoading();
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            originalImage = new Image();
-            originalImage.onload = () => {
-                // Show original preview
-                originalPreview.src = event.target.result;
+        isGif = file.type === 'image/gif';
+        
+        if (isGif) {
+            gifIndicator.style.display = 'block';
+            try {
+                // Load GIF.js library dynamically
+                if (!window.GifReader) {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/omggif@1.0.10/omggif.min.js';
+                    await new Promise((resolve, reject) => {
+                        script.onload = resolve;
+                        script.onerror = reject;
+                        document.head.appendChild(script);
+                    });
+                }
+                
+                // Process and store full resolution frames
+                fullResolutionGifFrames = await processGifFrames(file);
+                // Process frames at current size
+                gifFrames = await processGifFrames(file, currentPixelSize);
+                
+                // Store original frames for filter resets
+                originalGifFrames = gifFrames.map(frame => ({
+                    data: new ImageData(
+                        new Uint8ClampedArray(frame.data.data),
+                        frame.data.width,
+                        frame.data.height
+                    ),
+                    delay: frame.delay
+                }));
+                
+                // Display first frame as preview
+                originalPreview.src = URL.createObjectURL(file);
                 pixelArtContainer.style.display = 'block';
                 
-                // Set canvas to 32x32
-                pixelArtCanvas.width = PIXEL_SIZE;
-                pixelArtCanvas.height = PIXEL_SIZE;
+                // Set up canvas with current pixel size
+                pixelArtCanvas.width = currentPixelSize;
+                pixelArtCanvas.height = currentPixelSize;
                 
-                // Set display size (larger than actual pixels for visibility)
-                pixelArtCanvas.style.width = '300px';
-                pixelArtCanvas.style.height = '300px';
-                pixelArtCanvas.style.imageRendering = 'pixelated';
-
-                // Update button states
+                // Calculate display size (max 300px while maintaining aspect ratio)
+                const maxDisplaySize = 300;
+                const displaySize = Math.min(maxDisplaySize, currentPixelSize);
+                pixelArtCanvas.style.width = `${displaySize}px`;
+                pixelArtCanvas.style.height = `${displaySize}px`;
+                
+                // Start animation
+                animateGif();
+                
+                // Update UI for GIF mode
                 document.getElementById('uploadContainer').style.display = 'none';
-                buttonContainer.className = 'button-container show-generate';
-                generateBtn.disabled = false;
-                editBtn.disabled = true;
-                saveBtn.disabled = true;
+                buttonContainer.className = 'button-container show-save';
+                editBtn.style.display = 'none';
+                generateBtn.style.display = 'none';
+                filterControls.style.display = 'block';
+                saveBtn.disabled = false;
+                
+            } catch (error) {
+                console.error('Error processing GIF:', error);
+                alert('Error processing GIF. Please try another file.');
+                gifIndicator.style.display = 'none';
+            }
+        } else {
+            // Handle static image
+            gifIndicator.style.display = 'none';
+            filterControls.style.display = 'none';
+            editBtn.style.display = 'block';
+            generateBtn.style.display = 'block';
+            
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                originalImage = new Image();
+                originalImage.onload = () => {
+                    // Show original preview
+                    originalPreview.src = event.target.result;
+                    pixelArtContainer.style.display = 'block';
+                    
+                    // Set canvas to current pixel size
+                    pixelArtCanvas.width = currentPixelSize;
+                    pixelArtCanvas.height = currentPixelSize;
+                    
+                    // Calculate display size (max 300px while maintaining aspect ratio)
+                    const maxDisplaySize = 300;
+                    const displaySize = Math.min(maxDisplaySize, currentPixelSize);
+                    pixelArtCanvas.style.width = `${displaySize}px`;
+                    pixelArtCanvas.style.height = `${displaySize}px`;
 
-                // Hide loading after a short delay to ensure image is rendered
-                setTimeout(() => {
-                    hideLoading(animationInterval);
-                }, 1000);
+                    // Update button states
+                    document.getElementById('uploadContainer').style.display = 'none';
+                    buttonContainer.className = 'button-container show-generate';
+                    generateBtn.disabled = false;
+                    editBtn.disabled = true;
+                    saveBtn.disabled = true;
+
+                    // Hide loading after a short delay to ensure image is rendered
+                    setTimeout(() => {
+                        hideLoading(animationInterval);
+                    }, 1000);
+                };
+                originalImage.src = event.target.result;
             };
-            originalImage.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
+            reader.readAsDataURL(file);
+        }
+        
+        hideLoading(animationInterval);
     });
 
-    // Apply color filter to image
+    // Modified filter application for GIF support
     function applyFilter(filterName, permanent = false) {
-        const ctx = pixelArtCanvas.getContext('2d');
-        
-        // If not permanent, start from the original state
-        if (!permanent && originalPixelArt) {
-            ctx.putImageData(originalPixelArt, 0, 0);
-        }
-        
-        const imageData = ctx.getImageData(0, 0, PIXEL_SIZE, PIXEL_SIZE);
-        const data = imageData.data;
-        const filter = filters[filterName];
+        if (isGif) {
+            const filter = filters[filterName];
+            
+            // For normal filter, restore original frames
+            if (filterName === 'normal' && originalGifFrames) {
+                gifFrames = originalGifFrames.map(frame => ({
+                    data: new ImageData(
+                        new Uint8ClampedArray(frame.data.data),
+                        frame.data.width,
+                        frame.data.height
+                    ),
+                    delay: frame.delay
+                }));
+            } else {
+                // Apply filter to all frames
+                gifFrames = gifFrames.map(frame => {
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = currentPixelSize;
+                    tempCanvas.height = currentPixelSize;
+                    const tempCtx = tempCanvas.getContext('2d');
+                    
+                    tempCtx.putImageData(frame.data, 0, 0);
+                    const imageData = tempCtx.getImageData(0, 0, currentPixelSize, currentPixelSize);
+                    const data = imageData.data;
+                    
+                    for (let i = 0; i < data.length; i += 4) {
+                        const [r, g, b] = filter(data[i], data[i + 1], data[i + 2]);
+                        data[i] = Math.round(r / 51) * 51;
+                        data[i + 1] = Math.round(g / 51) * 51;
+                        data[i + 2] = Math.round(b / 51) * 51;
+                    }
+                    
+                    return {
+                        data: imageData,
+                        delay: frame.delay
+                    };
+                });
+            }
+            
+            // Restart animation with filtered frames
+            animateGif();
+        } else {
+            const ctx = pixelArtCanvas.getContext('2d');
+            
+            // If not permanent, start from the original state
+            if (!permanent && originalPixelArt) {
+                ctx.putImageData(originalPixelArt, 0, 0);
+            }
+            
+            const imageData = ctx.getImageData(0, 0, currentPixelSize, currentPixelSize);
+            const data = imageData.data;
+            
+            for (let i = 0; i < data.length; i += 4) {
+                const [r, g, b] = filters[filterName](data[i], data[i + 1], data[i + 2]);
+                data[i] = Math.round(r / 51) * 51;     // Quantize to 8-bit
+                data[i + 1] = Math.round(g / 51) * 51;
+                data[i + 2] = Math.round(b / 51) * 51;
+            }
 
-        for (let i = 0; i < data.length; i += 4) {
-            const [r, g, b] = filter(data[i], data[i + 1], data[i + 2]);
-            data[i] = Math.round(r / 51) * 51;     // Quantize to 8-bit
-            data[i + 1] = Math.round(g / 51) * 51;
-            data[i + 2] = Math.round(b / 51) * 51;
+            ctx.putImageData(imageData, 0, 0);
+            
+            // If this is a permanent change, update the original state
+            if (permanent) {
+                originalPixelArt = ctx.getImageData(0, 0, currentPixelSize, currentPixelSize);
+            }
+            
+            createEditorGrid(); // Update the editor grid
         }
-
-        ctx.putImageData(imageData, 0, 0);
-        
-        // If this is a permanent change, update the original state
-        if (permanent) {
-            originalPixelArt = ctx.getImageData(0, 0, PIXEL_SIZE, PIXEL_SIZE);
-        }
-        
-        createEditorGrid(); // Update the editor grid
     }
 
     // Function to convert image to pixel art
@@ -257,22 +583,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const animationInterval = showLoading();
         
         // Simulate processing delay
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
         const ctx = pixelArtCanvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
         
-        ctx.clearRect(0, 0, PIXEL_SIZE, PIXEL_SIZE);
-        ctx.drawImage(originalImage, 0, 0, PIXEL_SIZE, PIXEL_SIZE);
+        // Set canvas size to current pixel size
+        pixelArtCanvas.width = currentPixelSize;
+        pixelArtCanvas.height = currentPixelSize;
         
-        applyFilter('normal', true); // Apply normal filter to quantize colors
+        // Calculate display size (max 300px while maintaining aspect ratio)
+        const maxDisplaySize = 300;
+        const displaySize = Math.min(maxDisplaySize, currentPixelSize);
+        pixelArtCanvas.style.width = `${displaySize}px`;
+        pixelArtCanvas.style.height = `${displaySize}px`;
         
-        // Store the original pixel art state
-        originalPixelArt = ctx.getImageData(0, 0, PIXEL_SIZE, PIXEL_SIZE);
+        ctx.clearRect(0, 0, currentPixelSize, currentPixelSize);
+        ctx.drawImage(originalImage, 0, 0, currentPixelSize, currentPixelSize);
+        
+        applyFilter('normal', true);
+        
+        originalPixelArt = ctx.getImageData(0, 0, currentPixelSize, currentPixelSize);
         
         hideLoading(animationInterval);
         
-        // Update button states
         buttonContainer.className = 'button-container show-edit show-save';
         generateBtn.style.display = 'none';
         editBtn.disabled = false;
@@ -282,13 +616,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Function to create the editor grid
     function createEditorGrid() {
         editorGrid.innerHTML = '';
+        editorGrid.style.gridTemplateColumns = `repeat(${currentPixelSize}, 1fr)`;
+        
         const ctx = pixelArtCanvas.getContext('2d');
-        const imageData = ctx.getImageData(0, 0, PIXEL_SIZE, PIXEL_SIZE);
+        const imageData = ctx.getImageData(0, 0, currentPixelSize, currentPixelSize);
         const data = imageData.data;
 
-        for (let y = 0; y < PIXEL_SIZE; y++) {
-            for (let x = 0; x < PIXEL_SIZE; x++) {
-                const index = (y * PIXEL_SIZE + x) * 4;
+        for (let y = 0; y < currentPixelSize; y++) {
+            for (let x = 0; x < currentPixelSize; x++) {
+                const index = (y * currentPixelSize + x) * 4;
                 const r = data[index];
                 const g = data[index + 1];
                 const b = data[index + 2];
@@ -307,7 +643,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Function to update canvas from editor
     function updateCanvasFromEditor() {
         const ctx = pixelArtCanvas.getContext('2d');
-        const imageData = ctx.getImageData(0, 0, PIXEL_SIZE, PIXEL_SIZE);
+        const imageData = ctx.getImageData(0, 0, currentPixelSize, currentPixelSize);
         const data = imageData.data;
 
         const pixels = editorGrid.getElementsByClassName('pixel-cell');
@@ -325,43 +661,93 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.putImageData(imageData, 0, 0);
     }
 
-    // Function to save the pixel art
+    // Modified save function for GIF support
     function savePixelArt(autoSave = false) {
         if (!pixelArtCanvas) return;
-
+        
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const customName = filenameInput.value.trim();
-        const filename = customName ? `${customName}.png` : `pixel-art-${timestamp}.png`;
+        const filename = customName ? `${customName}.${isGif ? 'gif' : 'png'}` : `pixel-art-${timestamp}.${isGif ? 'gif' : 'png'}`;
         
-        const saveCanvas = document.createElement('canvas');
-        saveCanvas.width = PIXEL_SIZE;
-        saveCanvas.height = PIXEL_SIZE;
-        const saveCtx = saveCanvas.getContext('2d');
-        saveCtx.imageSmoothingEnabled = false;
-        saveCtx.drawImage(pixelArtCanvas, 0, 0);
-        
-        if (autoSave) {
-            const imageData = {
-                filename: filename,
-                timestamp: new Date().toISOString(),
-                dataUrl: saveCanvas.toDataURL('image/png')
-            };
-
-            let savedImages = JSON.parse(sessionStorage.getItem('pixelArtHistory') || '[]');
-            savedImages.unshift(imageData);
+        if (isGif) {
+            // Create GIF encoder
+            const gif = new GIF({
+                workers: 2,
+                quality: 10,
+                width: currentPixelSize,
+                height: currentPixelSize,
+                workerScript: 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js'
+            });
             
-            if (savedImages.length > 50) {
-                savedImages = savedImages.slice(0, 50);
+            // Add frames to encoder
+            gifFrames.forEach(frame => {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = currentPixelSize;
+                tempCanvas.height = currentPixelSize;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.putImageData(frame.data, 0, 0);
+                
+                gif.addFrame(tempCanvas, {delay: frame.delay});
+            });
+            
+            // Render GIF
+            gif.on('finished', blob => {
+                if (autoSave) {
+                    const imageData = {
+                        filename: filename,
+                        timestamp: new Date().toISOString(),
+                        dataUrl: URL.createObjectURL(blob),
+                        isGif: true
+                    };
+                    
+                    let savedImages = JSON.parse(sessionStorage.getItem('pixelArtHistory') || '[]');
+                    savedImages.unshift(imageData);
+                    
+                    if (savedImages.length > 50) {
+                        savedImages = savedImages.slice(0, 50);
+                    }
+                    
+                    sessionStorage.setItem('pixelArtHistory', JSON.stringify(savedImages));
+                } else {
+                    const link = document.createElement('a');
+                    link.download = filename;
+                    link.href = URL.createObjectURL(blob);
+                    link.click();
+                }
+            });
+            
+            gif.render();
+        } else {
+            const saveCanvas = document.createElement('canvas');
+            saveCanvas.width = currentPixelSize;
+            saveCanvas.height = currentPixelSize;
+            const saveCtx = saveCanvas.getContext('2d');
+            saveCtx.imageSmoothingEnabled = false;
+            saveCtx.drawImage(pixelArtCanvas, 0, 0);
+            
+            if (autoSave) {
+                const imageData = {
+                    filename: filename,
+                    timestamp: new Date().toISOString(),
+                    dataUrl: saveCanvas.toDataURL('image/png')
+                };
+
+                let savedImages = JSON.parse(sessionStorage.getItem('pixelArtHistory') || '[]');
+                savedImages.unshift(imageData);
+                
+                if (savedImages.length > 50) {
+                    savedImages = savedImages.slice(0, 50);
+                }
+                
+                sessionStorage.setItem('pixelArtHistory', JSON.stringify(savedImages));
             }
-            
-            sessionStorage.setItem('pixelArtHistory', JSON.stringify(savedImages));
-        }
 
-        if (!autoSave) {
-            const link = document.createElement('a');
-            link.download = filename;
-            link.href = saveCanvas.toDataURL('image/png');
-            link.click();
+            if (!autoSave) {
+                const link = document.createElement('a');
+                link.download = filename;
+                link.href = saveCanvas.toDataURL('image/png');
+                link.click();
+            }
         }
     }
 
@@ -388,7 +774,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCanvasFromEditor();
         // Make the current state permanent
         const ctx = pixelArtCanvas.getContext('2d');
-        originalPixelArt = ctx.getImageData(0, 0, PIXEL_SIZE, PIXEL_SIZE);
+        originalPixelArt = ctx.getImageData(0, 0, currentPixelSize, currentPixelSize);
         savePixelArt(true);
         editorModal.style.display = 'none';
     });
@@ -461,8 +847,8 @@ document.addEventListener('DOMContentLoaded', () => {
             originalImage = new Image();
             originalImage.onload = () => {
                 originalPreview.src = lastImage.dataUrl;
-                pixelArtCanvas.width = PIXEL_SIZE;
-                pixelArtCanvas.height = PIXEL_SIZE;
+                pixelArtCanvas.width = currentPixelSize;
+                pixelArtCanvas.height = currentPixelSize;
                 pixelArtCanvas.style.width = '300px';
                 pixelArtCanvas.style.height = '300px';
                 pixelArtCanvas.style.imageRendering = 'pixelated';
@@ -471,7 +857,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const img = new Image();
                 img.onload = () => {
                     ctx.drawImage(img, 0, 0);
-                    originalPixelArt = ctx.getImageData(0, 0, PIXEL_SIZE, PIXEL_SIZE);
+                    originalPixelArt = ctx.getImageData(0, 0, currentPixelSize, currentPixelSize);
                     
                     // Show the containers and enable buttons
                     document.getElementById('uploadContainer').style.display = 'none';
@@ -485,4 +871,7 @@ document.addEventListener('DOMContentLoaded', () => {
             originalImage.src = lastImage.dataUrl;
         }
     }
+
+    // Initialize pixel density display
+    updateDensityDisplay();
 }); 

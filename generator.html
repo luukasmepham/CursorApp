@@ -15,30 +15,50 @@
     <div class="container">
         <h1>Create Pixel Art</h1>
         <div id="uploadContainer" class="upload-container">
-            <label for="imageInput" class="btn upload-btn">
-                Choose Image
-                <input type="file" id="imageInput" accept="image/*" style="display: none;">
-            </label>
-            <p class="upload-info">Select an image to convert to pixel art</p>
+            <label for="imageInput" class="btn upload-btn">Choose Image</label>
+            <input type="file" id="imageInput" accept="image/*" style="display: none;">
+            <p class="upload-info">Supports PNG, JPG, and GIF files</p>
+            <p id="gifIndicator" class="upload-info" style="display: none;">GIF detected - Processing animation...</p>
         </div>
         <div id="pixelArtContainer">
             <div class="preview-container">
                 <div class="image-preview">
-                    <h3>Original Image</h3>
-                    <img id="originalPreview" alt="Original image preview">
+                    <h3>Original</h3>
+                    <img id="originalPreview" alt="Original image">
                 </div>
                 <div class="image-preview">
-                    <h3>Pixel Art Preview</h3>
+                    <h3>Pixelated</h3>
                     <canvas id="pixelArtCanvas"></canvas>
                 </div>
             </div>
-        </div>
-        <div class="button-container" id="buttonContainer">
-            <button id="generateBtn" class="btn generate-btn">Convert to Pixel Art</button>
-            <button id="editBtn" class="btn edit-btn">Edit Pixels</button>
-            <div class="save-container">
-                <input type="text" id="filenameInput" placeholder="Enter filename (optional)" class="filename-input">
-                <button id="saveBtn" class="btn">Save Image</button>
+            <div id="buttonContainer" class="button-container">
+                <button id="generateBtn" class="btn generate-btn" disabled>Convert to Pixel Art</button>
+                <button id="editBtn" class="btn edit-btn" disabled>Edit Pixels</button>
+                <div class="save-container">
+                    <input type="text" id="filenameInput" class="filename-input" placeholder="Enter filename (optional)">
+                    <button id="saveBtn" class="btn" disabled>Save Image</button>
+                </div>
+            </div>
+            
+            <div id="pixelDensityControl" class="pixel-density-control">
+                <h3>Pixel Density</h3>
+                <div class="slider-container">
+                    <span>8x8</span>
+                    <input type="range" id="pixelDensitySlider" min="8" max="256" value="256" step="8">
+                    <span>256x256</span>
+                </div>
+                <div class="density-value">Current: <span id="densityValue">256x256</span></div>
+            </div>
+
+            <div id="filterControls" class="filter-controls" style="display: none;">
+                <h3>Apply Filter</h3>
+                <div class="filter-buttons">
+                    <button class="btn filter-btn" data-filter="normal">Normal</button>
+                    <button class="btn filter-btn" data-filter="grayscale">Grayscale</button>
+                    <button class="btn filter-btn" data-filter="sepia">Sepia</button>
+                    <button class="btn filter-btn" data-filter="negative">Negative</button>
+                    <button class="btn filter-btn" data-filter="retro">Retro</button>
+                </div>
             </div>
         </div>
     </div>
@@ -72,6 +92,7 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
     <script src="script.js"></script>
 </body>
 </html> 
